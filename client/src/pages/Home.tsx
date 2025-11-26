@@ -136,11 +136,20 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <Link href="/post-meeting">
-                      <Button className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white px-6 sm:px-8 py-4 sm:py-6 text-base sm:text-lg h-auto">
-                        Begin Analysis
+                    {auth.isAuthenticated ? (
+                      <Link href="/post-meeting">
+                        <Button className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white px-6 sm:px-8 py-4 sm:py-6 text-base sm:text-lg h-auto">
+                          Begin Analysis
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        onClick={handleSignIn}
+                        className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white px-6 sm:px-8 py-4 sm:py-6 text-base sm:text-lg h-auto"
+                      >
+                        Sign in to begin
                       </Button>
-                    </Link>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -161,11 +170,13 @@ export default function Home() {
                 <p className="text-sm text-slate-600 font-light mb-6 leading-relaxed">
                   AI-powered briefings with client insights, industry trends, and strategic talking points.
                 </p>
-                <Link href="/meeting-prep">
-                  <Button variant="outline" className="w-full border-slate-300 hover:bg-slate-50">
-                    Prepare Meeting
-                  </Button>
-                </Link>
+                {auth.isAuthenticated && (
+                  <Link href="/meeting-prep">
+                    <Button variant="outline" className="w-full border-slate-300 hover:bg-slate-50">
+                      Prepare Meeting
+                    </Button>
+                  </Link>
+                )}
               </CardContent>
             </Card>
 
@@ -181,11 +192,13 @@ export default function Home() {
                 <p className="text-sm text-slate-600 font-light mb-6 leading-relaxed">
                   Strategic campaign planning with market segmentation and messaging frameworks.
                 </p>
-                <Link href="/account-attack">
-                  <Button variant="outline" className="w-full border-slate-300 hover:bg-slate-50">
-                    Plan Campaign
-                  </Button>
-                </Link>
+                {auth.isAuthenticated && (
+                  <Link href="/account-attack">
+                    <Button variant="outline" className="w-full border-slate-300 hover:bg-slate-50">
+                      Plan Campaign
+                    </Button>
+                  </Link>
+                )}
               </CardContent>
             </Card>
           </div>
