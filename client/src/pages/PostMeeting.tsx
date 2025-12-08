@@ -2,7 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, Square, Play, ArrowLeft, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
+import {
+  Mic,
+  Square,
+  Play,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  CheckCircle2,
+  FileDown,
+  Loader2,
+} from "lucide-react";
 import { Link } from "wouter";
 
 declare global {
@@ -22,7 +32,32 @@ const highlightChips = [
   { label: "Sustainability", value: "Prefers recyclable coolant" },
 ];
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
+const REPORT_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/api/reports/post-meeting` : "/api/reports/post-meeting";
+const REPORT_FILENAME_FALLBACK = "post-meeting-brief.docx";
+
+const extractFilename = (header: string | null) => {
+  if (!header) return REPORT_FILENAME_FALLBACK;
+  const match = header.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+  if (match?.[1]) {
+    return match[1].trim();
+  }
+  return REPORT_FILENAME_FALLBACK;
+};
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 const MAX_RECORDING_SECONDS = 60;
+const MIN_REPORT_CHARS = 40;
 
 export default function PostMeeting() {
   const totalSteps = 3;
@@ -35,6 +70,9 @@ export default function PostMeeting() {
   const [recorderError, setRecorderError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSuccess, setReportSuccess] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -44,8 +82,10 @@ export default function PostMeeting() {
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef("");
 
-  const canContinueFromSummary = hasRecording || notes.trim().length > 0;
-  const summaryPreview = notes.trim().length ? notes.trim() : SAMPLE_SUMMARY;
+  const trimmedNotes = notes.trim();
+  const canContinueFromSummary = hasRecording || trimmedNotes.length > 0;
+  const summaryPreview = trimmedNotes.length ? trimmedNotes : SAMPLE_SUMMARY;
+  const canRequestReport = trimmedNotes.length >= MIN_REPORT_CHARS;
 
   const handleAnalyzeSummary = () => {
     if (!canContinueFromSummary) return;
@@ -54,6 +94,25 @@ export default function PostMeeting() {
 
   const handleBackStep = () => setStep((prev) => Math.max(1, prev - 1));
   const handleNextStep = () => setStep((prev) => Math.min(totalSteps, prev + 1));
+  const handleResetFlow = () => {
+    cleanupMedia();
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setAudioUrl(null);
+    setNotes("");
+    setTranscript("");
+    finalTranscriptRef.current = "";
+    setHasRecording(false);
+    setIsRecording(false);
+    setIsTranscribing(false);
+    setRecordedSeconds(0);
+    setStep(1);
+    setReportError(null);
+    setReportSuccess(false);
+    setIsGeneratingReport(false);
+    setRecorderError(null);
+  };
 
   const formatDuration = (seconds: number) => {
     const clamped = Math.min(seconds, MAX_RECORDING_SECONDS);
@@ -112,13 +171,17 @@ export default function PostMeeting() {
     };
   }, []);
 
-useEffect(() => {
-  return () => {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
-  };
-}, [audioUrl]);
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
+  useEffect(() => {
+    setReportSuccess(false);
+  }, [notes]);
 
   const stopTranscription = () => {
     const recognition = recognitionRef.current;
@@ -303,6 +366,51 @@ useEffect(() => {
     if (!audioUrl || !audioPlayerRef.current) return;
     audioPlayerRef.current.currentTime = 0;
     audioPlayerRef.current.play();
+  };
+
+  const handleGenerateReport = async () => {
+    const normalizedNotes = notes.trim();
+    if (normalizedNotes.length < MIN_REPORT_CHARS) {
+      setReportError("Add at least 40 characters of context before generating the report.");
+      return;
+    }
+
+    setIsGeneratingReport(true);
+    setReportError(null);
+    setReportSuccess(false);
+
+    try {
+      const response = await fetch(REPORT_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ notes: normalizedNotes }),
+      });
+
+      if (!response.ok) {
+        let message = "Unable to generate the report.";
+        try {
+          const payload = await response.json();
+          if (payload?.message) {
+            message = payload.message;
+          }
+        } catch {
+          // ignore JSON parsing errors
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const filename = extractFilename(response.headers.get("Content-Disposition"));
+      downloadBlob(blob, filename);
+      setReportSuccess(true);
+    } catch (error) {
+      console.error("Report generation failed", error);
+      setReportError(error instanceof Error ? error.message : "Unexpected error generating the report.");
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   const renderStepIndicator = () => (
@@ -566,44 +674,62 @@ useEffect(() => {
         <div className="rounded-2xl border border-slate-200 p-6 bg-slate-50">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-3">Next up</p>
           <p className="text-sm text-slate-700">
-            Hit “Generate analysis” to create the full brief. You’ll get a downloadable PDF plus an email-ready summary for
-            your customer follow-up.
+            Hit “Generate Word brief” to create an editable .docx we populate with GPT. Provide at least ~40 characters so
+            the model has enough context, then edit the output together before sharing.
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-          <Button
-            variant="outline"
-            onClick={handleBackStep}
-            className="w-full sm:w-auto border-slate-300 gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <div className="flex w-full sm:w-auto flex-col gap-2 sm:flex-row">
+        {reportError && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {reportError}
+          </div>
+        )}
+        {reportSuccess && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Word brief downloaded. Share it internally or tailor it further before the customer hand-off.
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={handleBackStep}
+              className="w-full border-slate-300 gap-2 sm:w-auto"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
             <Link href="/">
-              <Button variant="ghost" className="w-full sm:w-auto text-slate-600">
+              <Button variant="ghost" className="w-full text-slate-600 sm:w-auto">
                 Return to dashboard
               </Button>
             </Link>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button
-              className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800"
-              onClick={() => {
-                setStep(1);
-                setNotes("");
-                setHasRecording(false);
-                setRecordedSeconds(0);
-                if (audioUrl) {
-                  URL.revokeObjectURL(audioUrl);
-                }
-                setAudioUrl(null);
-                setTranscript("");
-                finalTranscriptRef.current = "";
-                setIsTranscribing(false);
-                setRecorderError(null);
-              }}
+              variant="outline"
+              className="w-full border-slate-300 text-slate-700 sm:w-auto"
+              onClick={handleResetFlow}
             >
-              Generate analysis
+              Reset flow
+            </Button>
+            <Button
+              className="w-full bg-slate-900 text-white hover:bg-slate-800 sm:w-auto"
+              disabled={!canRequestReport || isGeneratingReport}
+              onClick={() => void handleGenerateReport()}
+            >
+              {isGeneratingReport ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating…
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <FileDown className="h-4 w-4" />
+                  Generate Word brief
+                </div>
+              )}
             </Button>
           </div>
         </div>
