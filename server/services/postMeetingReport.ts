@@ -1,56 +1,68 @@
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import { z } from "zod";
 import { getOpenAIClient } from "../lib/openai-client.js";
 
+const SolutionTableRow = z.object({
+  layer: z.string(),
+  component: z.string(),
+  materialSpec: z.string(),
+  purpose: z.string(),
+});
+
+const ProductSpecRow = z.object({
+  product: z.string(),
+  spec: z.string(),
+  manufacturers: z.string(),
+});
+
+const EprImpactRow = z.object({
+  solution: z.string(),
+  materialWeight: z.string(),
+  eprImpact: z.string(),
+  notes: z.string(),
+});
+
+const SolutionSchema = z.object({
+  title: z.string(),
+  snapshot: z.array(z.string()).min(1),
+  layerStructure: z.array(SolutionTableRow).min(1),
+  productSpecs: z.array(ProductSpecRow).min(1),
+  expectedOutcome: z.array(z.string()).min(1),
+});
+
 const ReportSchema = z.object({
-  executiveSummary: z.string(),
-  situationOverview: z.string(),
-  packagingSignals: z
-    .array(
-      z.object({
-        label: z.string(),
-        detail: z.string(),
-      })
-    )
-    .min(1),
-  recommendations: z
-    .array(
-      z.object({
-        title: z.string(),
-        rationale: z.string(),
-        impact: z.string(),
-      })
-    )
-    .min(1),
-  riskWatchouts: z
-    .array(
-      z.object({
-        risk: z.string(),
-        mitigation: z.string(),
-      })
-    )
-    .min(1),
-  nextSteps: z
-    .array(
-      z.object({
-        owner: z.string(),
-        action: z.string(),
-        due: z.string(),
-      })
-    )
-    .min(1),
+  reportTitle: z.string(),
+  application: z.string(),
+  currentFilm: z.string(),
+  executiveSummary: z.array(z.string()).min(1),
+  currentState: z.array(z.string()).min(1),
+  solutions: z.array(SolutionSchema).min(1),
+  eprImpact: z.array(EprImpactRow).min(1),
+  nextStepsChecklist: z.array(z.string()).min(1),
+  nextStepsAdditional: z.array(z.string()).min(1),
 });
 
 type StructuredReport = z.infer<typeof ReportSchema>;
 
 const responseShapeDescription = JSON.stringify(
   {
-    executiveSummary: "string",
-    situationOverview: "string",
-    packagingSignals: [{ label: "string", detail: "string" }],
-    recommendations: [{ title: "string", rationale: "string", impact: "string" }],
-    riskWatchouts: [{ risk: "string", mitigation: "string" }],
-    nextSteps: [{ owner: "string", action: "string", due: "string" }],
+    reportTitle: "string",
+    application: "string",
+    currentFilm: "string",
+    executiveSummary: ["string"],
+    currentState: ["string"],
+    solutions: [
+      {
+        title: "string",
+        snapshot: ["string"],
+        layerStructure: [{ layer: "string", component: "string", materialSpec: "string", purpose: "string" }],
+        productSpecs: [{ product: "string", spec: "string", manufacturers: "string" }],
+        expectedOutcome: ["string"],
+      },
+    ],
+    eprImpact: [{ solution: "string", materialWeight: "string", eprImpact: "string", notes: "string" }],
+    nextStepsChecklist: ["string"],
+    nextStepsAdditional: ["string"],
   },
   null,
   2
@@ -81,11 +93,11 @@ async function buildStructuredBrief(notes: string): Promise<StructuredReport> {
 
     const response = await client.responses.create({
       model,
-      temperature: 0.3,
+      temperature: 0.25,
       input: [
         {
           role: "system",
-          content: `You are a post-meeting analyst for a packaging solutions team. Return thoughtful, specific insights the team can edit together. Respond with valid JSON only (no prose) and follow this shape:\n${responseShapeDescription}`,
+          content: `You are a packaging solutions consultant generating a stretch film optimization report. Return valid JSON ONLY (no prose, no markdown). Use the shape shown (values are placeholders only, DO NOT reuse them):\n${responseShapeDescription}\n\nGuidance:\n- Use ONLY the meeting summary for content; do not copy any example text.\n- Always produce 3 solutions (A/B/C) with concise titles tied to the summary.\n- Keep bullets short and action-oriented (max ~18 words).\n- Layer structure must have 3 rows: Primary, Secondary, Tertiary.\n- Product specs table must include product, spec, manufacturers.\n- EPR impact rows should align to the solutions.\n- Next steps: checklist items (short) and additional recommended steps (short).\n- Do NOT include markdown, quotes, or extra text beyond the JSON.`,
         },
         {
           role: "user",
@@ -118,48 +130,69 @@ async function buildStructuredBrief(notes: string): Promise<StructuredReport> {
 }
 
 function buildFallbackBrief(notes: string): StructuredReport {
-  const truncated = notes.length > 320 ? `${notes.slice(0, 320)}…` : notes;
-
+  const truncated = notes.length > 320 ? `${notes.slice(0, 320)}…` : notes || "Captured summary unavailable.";
   return {
-    executiveSummary: `Captured opportunity: ${truncated || "context unavailable"}.`,
-    situationOverview:
-      "The customer is looking for guidance on cold-chain assurance, freight efficiency, and sustainable packaging upgrades.",
-    packagingSignals: [
-      { label: "Customer voice", detail: truncated || "Need to confirm meeting summary." },
-      { label: "Supply chain goal", detail: "Stabilize temperature and reduce damage risk during parcel transit." },
-      { label: "Commercial target", detail: "Unlock faster follow-up sequencing with a ready-to-edit briefing doc." },
+    reportTitle: "Stretch Film Optimization Report",
+    application: "Stretch Film Optimization",
+    currentFilm: "Current film not specified",
+    executiveSummary: [
+      `Captured summary: ${truncated}`,
+      "Three optimized film options proposed based on captured notes.",
     ],
-    recommendations: [
+    currentState: [
+      truncated,
+      "Key risks and drivers derived from the provided summary.",
+    ],
+    solutions: [
       {
-        title: "Validate lane + payload assumptions",
-        rationale: "Confirm packout type, coolant duration, and carrier service to align kit to real constraints.",
-        impact: "Ensures right-sizing of materials and prevents over-engineering the solution.",
+        title: "Solution A",
+        snapshot: ["Tailored to primary needs from the summary.", "Emphasizes compatibility and stability."],
+        layerStructure: [
+          { layer: "Primary", component: "Stretch Film", materialSpec: "TBD", purpose: "Align to puncture/tear needs" },
+          { layer: "Secondary", component: "Application", materialSpec: "TBD", purpose: "Match machine/throughput requirements" },
+          { layer: "Tertiary", component: "Wrap Pattern", materialSpec: "TBD", purpose: "Containment consistency" },
+        ],
+        productSpecs: [{ product: "Film", spec: "TBD", manufacturers: "TBD" }],
+        expectedOutcome: ["Improved performance tailored to summary.", "Baseline option to compare against."],
       },
       {
-        title: "Pair insulation with cost modeling",
-        rationale: "Overlay dim-weight impact with FedEx/UPS rate tables to show savings or overruns.",
-        impact: "Provides finance-backed justification for moving forward.",
+        title: "Solution B",
+        snapshot: ["Balances gauge reduction and containment.", "Targets EPR and weight reduction if noted."],
+        layerStructure: [
+          { layer: "Primary", component: "Stretch Film", materialSpec: "TBD", purpose: "Gauge/weight optimization" },
+          { layer: "Secondary", component: "Application", materialSpec: "TBD", purpose: "Force-to-wrap alignment" },
+          { layer: "Tertiary", component: "Wrap Pattern", materialSpec: "TBD", purpose: "Economy and break reduction" },
+        ],
+        productSpecs: [{ product: "Film", spec: "TBD", manufacturers: "TBD" }],
+        expectedOutcome: ["Material savings where applicable.", "Supports EPR and stability goals."],
       },
       {
-        title: "Pre-select supplier bench",
-        rationale: "Shortlist two qualified cold chain partners and a rapid prototyping option.",
-        impact: "Keeps the customer engagement focused and compresses sourcing timelines.",
+        title: "Solution C",
+        snapshot: ["Aggressive optimization for EPR and performance.", "Assumes readiness for material change."],
+        layerStructure: [
+          { layer: "Primary", component: "Stretch Film", materialSpec: "TBD", purpose: "High-performance resin profile" },
+          { layer: "Secondary", component: "Application", materialSpec: "TBD", purpose: "Engineered for down-gauge" },
+          { layer: "Tertiary", component: "Wrap Pattern", materialSpec: "TBD", purpose: "Prevent puncture starts" },
+        ],
+        productSpecs: [{ product: "Film", spec: "TBD", manufacturers: "TBD" }],
+        expectedOutcome: ["Strongest EPR impact if applicable.", "Maintains performance while reducing weight."],
       },
     ],
-    riskWatchouts: [
-      {
-        risk: "Insufficient detail on thermal profile",
-        mitigation: "Request validation samples or lab data before finalizing recommendations.",
-      },
-      {
-        risk: "Delayed action items",
-        mitigation: "Assign owners and due dates immediately following distribution of the brief.",
-      },
+    eprImpact: [
+      { solution: "Solution A", materialWeight: "TBD", eprImpact: "TBD", notes: "Derived from summary" },
+      { solution: "Solution B", materialWeight: "TBD", eprImpact: "TBD", notes: "Derived from summary" },
+      { solution: "Solution C", materialWeight: "TBD", eprImpact: "TBD", notes: "Derived from summary" },
     ],
-    nextSteps: [
-      { owner: "Account Lead", action: "Confirm payload, coolant, and carrier constraints with customer", due: "Next 2 business days" },
-      { owner: "Packaging SME", action: "Draft kit comparison with pros/cons and cost", due: "End of week" },
-      { owner: "Ops Enablement", action: "Line up supplier calls and sample requests", due: "Early next week" },
+    nextStepsChecklist: [
+      "Validate assumptions from captured summary",
+      "Confirm load weight/type and machine settings",
+      "Assess environmental conditions and containment targets",
+      "Align on EPR and performance objectives",
+    ],
+    nextStepsAdditional: [
+      "Run trials for the proposed films under identical conditions",
+      "Capture film weight per load for EPR savings",
+      "Request vendor samples for head-to-head comparison",
     ],
   };
 }
@@ -168,30 +201,30 @@ async function createWordDocument(report: StructuredReport, notes: string) {
   const doc = new Document({
     creator: "Defft.ai",
     description: "Generated post-meeting briefing based on captured summary.",
-    title: "Defft Post-Meeting Brief",
+    title: report.reportTitle,
     sections: [
       {
         properties: {},
         children: [
-          createHeading("Defft Post-Meeting Brief", HeadingLevel.TITLE),
+          createHeading(report.reportTitle, HeadingLevel.TITLE),
           createBodyParagraph(`Generated ${new Date().toLocaleString()}`),
-          createHeading("Executive Summary"),
-          createBodyParagraph(report.executiveSummary),
-          createHeading("Situation Overview"),
-          createBodyParagraph(report.situationOverview),
-          createHeading("Customer Signals"),
-          ...report.packagingSignals.map((signal) => createBulletParagraph(`${signal.label}: ${signal.detail}`)),
-          createHeading("Recommended Plays"),
-          ...report.recommendations.map((rec) =>
-            createBulletParagraph(`${rec.title} — ${rec.rationale} (Impact: ${rec.impact})`)
-          ),
-          createHeading("Risks & Watchouts"),
-          ...report.riskWatchouts.map((risk) => createBulletParagraph(`${risk.risk} — ${risk.mitigation}`)),
-          createHeading("Next Steps"),
-          ...report.nextSteps.map((step) =>
-            createBulletParagraph(`${step.owner}: ${step.action} (Due: ${step.due})`)
-          ),
-          createHeading("Raw Notes"),
+          createBodyParagraph("Customer: ____________    Location: ____________    Prepared For: ____________"),
+          createBodyParagraph("Prepared By: DEFFT.ai / PackIntel"),
+          createBodyParagraph(`Application: ${report.application}`),
+          createBodyParagraph(`Current Film: ${report.currentFilm}`),
+          createHeading("1. Executive Summary", HeadingLevel.HEADING_2),
+          ...report.executiveSummary.map(createBulletParagraph),
+          createHeading("2. Current State", HeadingLevel.HEADING_2),
+          ...report.currentState.map(createBulletParagraph),
+          ...renderSolutions(report.solutions),
+          createHeading("6. EPR Impact Analysis", HeadingLevel.HEADING_2),
+          createEprTable(report.eprImpact),
+          createHeading("7. Next Steps", HeadingLevel.HEADING_2),
+          createHeading("A. Validation Checklist", HeadingLevel.HEADING_3),
+          ...report.nextStepsChecklist.map((item) => createChecklistLine(item)),
+          createHeading("B. Additional Recommended Steps", HeadingLevel.HEADING_3),
+          ...report.nextStepsAdditional.map(createBulletParagraph),
+          createHeading("Appendix: Raw Notes", HeadingLevel.HEADING_2),
           createBodyParagraph(notes || "No notes were captured."),
         ],
       },
@@ -222,5 +255,73 @@ function createBulletParagraph(text: string) {
     bullet: { level: 0 },
     spacing: { after: 80 },
   });
+}
+
+function createChecklistLine(text: string) {
+  return new Paragraph({
+    children: [new TextRun({ text: `☐ ${text}` })],
+    spacing: { after: 80 },
+  });
+}
+
+function createTable(headers: string[], rows: string[][]) {
+  const tableRows = [
+    new TableRow({
+      children: headers.map((h) =>
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })],
+        })
+      ),
+    }),
+    ...rows.map(
+      (row) =>
+        new TableRow({
+          children: row.map((cell) => new TableCell({ children: [new Paragraph(cell)] })),
+        })
+    ),
+  ];
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: tableRows,
+  });
+}
+
+function renderSolutions(solutions: SolutionSchema[]) {
+  const children: Paragraph[] | Table[] = [];
+
+  solutions.forEach((solution, idx) => {
+    children.push(createHeading(`${idx + 3}. ${solution.title}`, HeadingLevel.HEADING_2));
+    children.push(createHeading("Snapshot", HeadingLevel.HEADING_3));
+    solution.snapshot.forEach((item) => children.push(createBulletParagraph(item)));
+
+    children.push(createHeading("Layer Structure", HeadingLevel.HEADING_3));
+    children.push(
+      createTable(
+        ["Layer", "Component", "Material/Spec", "Purpose"],
+        solution.layerStructure.map((row) => [row.layer, row.component, row.materialSpec, row.purpose])
+      )
+    );
+
+    children.push(createHeading("Product Specs and Manufacturer(s)", HeadingLevel.HEADING_3));
+    children.push(
+      createTable(
+        ["Product", "Spec", "Manufacturers"],
+        solution.productSpecs.map((row) => [row.product, row.spec, row.manufacturers])
+      )
+    );
+
+    children.push(createHeading("Expected Outcome", HeadingLevel.HEADING_3));
+    solution.expectedOutcome.forEach((item) => children.push(createBulletParagraph(item)));
+  });
+
+  return children;
+}
+
+function createEprTable(rows: EprImpactRow[]) {
+  return createTable(
+    ["Solution", "Material Weight", "EPR Impact", "Notes"],
+    rows.map((row) => [row.solution, row.materialWeight, row.eprImpact, row.notes])
+  );
 }
 
