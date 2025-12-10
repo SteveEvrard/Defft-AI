@@ -1,5 +1,4 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 const DEFAULT_RECIPIENT = "steve@defft.ai";
 
@@ -11,65 +10,41 @@ type SendReportEmailParams = {
 
 let cachedTransporter: Transporter | null = null;
 
-const REQUIRED_ENV_VARS = [
-  "SMTP_HOST",
-  "SMTP_PORT",
-  "SMTP_USER",
-  "SMTP_OAUTH_CLIENT_ID",
-  "SMTP_OAUTH_CLIENT_SECRET",
-  "SMTP_OAUTH_REFRESH_TOKEN",
-] as const;
-
-function ensureMailerConfig() {
-  const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
-  if (missing.length) {
-    throw new Error(`Email transport is missing: ${missing.join(", ")}`);
-  }
-}
-
-function getBoolean(value: string | undefined, fallback: boolean) {
-  if (value === undefined) return fallback;
-  return value.toLowerCase() === "true";
-}
-
 function getTransporter() {
   if (cachedTransporter) {
     return cachedTransporter;
   }
 
-  ensureMailerConfig();
+  // Required environment variables
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT;
+  const user = process.env.SMTP_USER;
+  const password = process.env.SMTP_PASSWORD;
 
-  const host = process.env.SMTP_HOST as string;
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  const secure = getBoolean(process.env.SMTP_SECURE, port === 465);
-  const user = process.env.SMTP_USER as string;
-  const clientId = process.env.SMTP_OAUTH_CLIENT_ID as string;
-  const clientSecret = process.env.SMTP_OAUTH_CLIENT_SECRET as string;
-  const refreshToken = process.env.SMTP_OAUTH_REFRESH_TOKEN as string;
-  const accessToken = process.env.SMTP_OAUTH_ACCESS_TOKEN;
-  const expiresRaw = process.env.SMTP_OAUTH_ACCESS_TOKEN_EXPIRES;
-  const expires = expiresRaw ? Number(expiresRaw) : undefined;
-
-  const auth: SMTPTransport.Options["auth"] = {
-    type: "OAuth2",
-    user,
-    clientId,
-    clientSecret,
-    refreshToken,
-  };
-
-  if (accessToken) {
-    auth.accessToken = accessToken;
+  if (!host || !port || !user || !password) {
+    throw new Error(
+      "Email configuration is missing. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASSWORD environment variables."
+    );
   }
-  if (expires !== undefined && Number.isFinite(expires)) {
-    auth.expires = expires;
+
+  const portNumber = Number(port);
+  if (isNaN(portNumber)) {
+    throw new Error(`Invalid SMTP_PORT: ${port}. Must be a number.`);
   }
+
+  // Port 465 uses SSL, other ports typically use STARTTLS
+  const secure = portNumber === 465;
 
   cachedTransporter = nodemailer.createTransport({
     host,
-    port,
+    port: portNumber,
     secure,
-    auth,
+    auth: {
+      user,
+      pass: password,
+    },
+    // For ports other than 465, require TLS
+    ...(portNumber !== 465 && { requireTLS: true }),
   });
 
   return cachedTransporter;
