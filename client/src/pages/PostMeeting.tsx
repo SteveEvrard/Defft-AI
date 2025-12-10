@@ -25,17 +25,17 @@ declare global {
 const SAMPLE_SUMMARY =
   "Customer shipping 2 Ozempic pens per parcel via FedEx/UPS. Needs 72–96h cold chain, 2–8 °C stability, and lower-plastic insulation.";
 
-const highlightChips = [
-  { label: "Cold Chain", value: "2–8 °C protection for 72–96h" },
-  { label: "Parcel Density", value: "2 pens / parcel" },
-  { label: "Carrier", value: "FedEx / UPS Priority" },
-  { label: "Sustainability", value: "Prefers recyclable coolant" },
-];
-
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
 const REPORT_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/api/reports/post-meeting` : "/api/reports/post-meeting";
+const CONTEXT_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/api/reports/context-preview` : "/api/reports/context-preview";
 const MAX_RECORDING_SECONDS = 60;
 const MIN_REPORT_CHARS = 40;
+
+type DetectedContext = {
+  chips: { label: string; value: string }[];
+  priorities: string[];
+  playbooks: string[];
+};
 
 export default function PostMeeting() {
   const totalSteps = 3;
@@ -51,6 +51,10 @@ export default function PostMeeting() {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSuccessMessage, setReportSuccessMessage] = useState<string | null>(null);
+  const [contextPreview, setContextPreview] = useState<DetectedContext | null>(null);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
+  const [isAnalyzingContext, setIsAnalyzingContext] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -64,10 +68,18 @@ export default function PostMeeting() {
   const canContinueFromSummary = hasRecording || trimmedNotes.length > 0;
   const summaryPreview = trimmedNotes.length ? trimmedNotes : SAMPLE_SUMMARY;
   const canRequestReport = trimmedNotes.length >= MIN_REPORT_CHARS;
+  const detectedContext = contextPreview;
 
-  const handleAnalyzeSummary = () => {
-    if (!canContinueFromSummary) return;
-    setStep(2);
+  const handleAnalyzeSummary = async () => {
+    if (!canContinueFromSummary || isAnalyzingContext) return;
+    setIsAnalyzingContext(true);
+    setContextError(null);
+    try {
+      await fetchContextPreview(trimmedNotes || SAMPLE_SUMMARY);
+      setStep(2);
+    } finally {
+      setIsAnalyzingContext(false);
+    }
   };
 
   const handleBackStep = () => setStep((prev) => Math.max(1, prev - 1));
@@ -90,6 +102,10 @@ export default function PostMeeting() {
     setReportSuccessMessage(null);
     setIsGeneratingReport(false);
     setRecorderError(null);
+    setContextPreview(null);
+    setContextError(null);
+    setIsLoadingContext(false);
+    setIsAnalyzingContext(false);
   };
 
   const formatDuration = (seconds: number) => {
@@ -160,6 +176,33 @@ export default function PostMeeting() {
   useEffect(() => {
     setReportSuccessMessage(null);
   }, [notes]);
+
+  const fetchContextPreview = async (notesToAnalyze: string) => {
+    setIsLoadingContext(true);
+    setContextError(null);
+    try {
+      const response = await fetch(CONTEXT_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesToAnalyze }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message = payload?.message ?? "Unable to analyze context.";
+        throw new Error(message);
+      }
+
+      const data = (await response.json()) as DetectedContext;
+      setContextPreview(data);
+      return data;
+    } catch (error) {
+      setContextError(error instanceof Error ? error.message : "Unexpected error analyzing context.");
+      throw error;
+    } finally {
+      setIsLoadingContext(false);
+    }
+  };
 
   const stopTranscription = () => {
     const recognition = recognitionRef.current;
@@ -548,13 +591,25 @@ export default function PostMeeting() {
             </Button>
           </Link>
           <Button
-            onClick={handleAnalyzeSummary}
-            disabled={!canContinueFromSummary}
+            onClick={() => void handleAnalyzeSummary()}
+            disabled={!canContinueFromSummary || isAnalyzingContext}
             className="bg-slate-900 text-white hover:bg-slate-800 w-full sm:w-auto gap-2"
           >
-            Analyze summary
-            <ArrowRight className="h-4 w-4" />
+            {isAnalyzingContext ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing…
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                Analyze summary
+                <ArrowRight className="h-4 w-4" />
+              </span>
+            )}
           </Button>
+          {contextError && (
+            <div className="text-xs text-red-600 sm:text-right">{contextError}</div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -569,6 +624,17 @@ export default function PostMeeting() {
           <p className="text-sm sm:text-base text-slate-600 mt-2">
             We parsed your summary into actionable packaging signals. Confirm or tweak before we generate outputs.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            {isLoadingContext ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                Analyzing context with GPT…
+              </span>
+            ) : (
+              <span>AI-detected highlights based on your notes.</span>
+            )}
+            {contextError && <span className="text-red-600">{contextError}</span>}
+          </div>
         </div>
 
         <div className="rounded-xl border border-dashed border-slate-300 p-5 bg-slate-50">
@@ -577,12 +643,18 @@ export default function PostMeeting() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {highlightChips.map((chip) => (
-            <div key={chip.label} className="rounded-2xl border border-slate-200 p-4">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">{chip.label}</p>
-              <p className="text-sm text-slate-800">{chip.value}</p>
+          {detectedContext ? (
+            detectedContext.chips.map((chip) => (
+              <div key={`${chip.label}-${chip.value}`} className="rounded-2xl border border-slate-200 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">{chip.label}</p>
+                <p className="text-sm text-slate-800">{chip.value}</p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
+              {isLoadingContext ? "Analyzing with GPT…" : "No context yet. Run analysis to populate signals."}
             </div>
-          ))}
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-200 p-6 bg-white space-y-4">
@@ -590,14 +662,22 @@ export default function PostMeeting() {
             <Sparkles className="h-5 w-5 text-[#FF6B4A]" />
             <div>
               <p className="text-sm font-medium text-slate-900">Auto-detected priorities</p>
-              <p className="text-sm text-slate-600">Temperature assurance · Parcel efficiency · Sustainability · Patient safety</p>
+              <p className="text-sm text-slate-600">
+                {detectedContext && detectedContext.priorities.length
+                  ? detectedContext.priorities.join(" · ")
+                  : "Add more detail to surface priorities."}
+              </p>
             </div>
           </div>
           <div className="flex items-start gap-3">
             <Sparkles className="h-5 w-5 text-[#4ECDC4]" />
             <div>
               <p className="text-sm font-medium text-slate-900">Suggested playbooks</p>
-              <p className="text-sm text-slate-600">Cold-chain kit builder · Dim-weight optimization · Sustainable insulation matrix</p>
+              <p className="text-sm text-slate-600">
+                {detectedContext && detectedContext.playbooks.length
+                  ? detectedContext.playbooks.join(" · ")
+                  : "We’ll suggest playbooks once we detect key signals."}
+              </p>
             </div>
           </div>
         </div>
