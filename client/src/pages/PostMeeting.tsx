@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Mic,
@@ -52,6 +53,8 @@ export default function PostMeeting() {
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSuccessMessage, setReportSuccessMessage] = useState<string | null>(null);
   const [contextPreview, setContextPreview] = useState<DetectedContext | null>(null);
+  const [editableContext, setEditableContext] = useState<DetectedContext | null>(null);
+  const [editingChips, setEditingChips] = useState<Set<number>>(new Set());
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
   const [isAnalyzingContext, setIsAnalyzingContext] = useState(false);
@@ -68,7 +71,7 @@ export default function PostMeeting() {
   const canContinueFromSummary = hasRecording || trimmedNotes.length > 0;
   const summaryPreview = trimmedNotes.length ? trimmedNotes : SAMPLE_SUMMARY;
   const canRequestReport = trimmedNotes.length >= MIN_REPORT_CHARS;
-  const detectedContext = contextPreview;
+  const detectedContext = editableContext ?? contextPreview;
 
   const handleAnalyzeSummary = async () => {
     if (!canContinueFromSummary || isAnalyzingContext) return;
@@ -103,9 +106,67 @@ export default function PostMeeting() {
     setIsGeneratingReport(false);
     setRecorderError(null);
     setContextPreview(null);
+    setEditableContext(null);
+    setEditingChips(new Set());
     setContextError(null);
     setIsLoadingContext(false);
     setIsAnalyzingContext(false);
+  };
+
+  const handleChipChange = (index: number, field: "label" | "value", newValue: string) => {
+    setEditableContext((current) => {
+      if (!current) return current;
+      const nextChips = [...current.chips];
+      if (!nextChips[index]) return current;
+      nextChips[index] = { ...nextChips[index], [field]: newValue };
+      return { ...current, chips: nextChips };
+    });
+  };
+
+  const handleAddChip = () => {
+    setEditableContext((current) => {
+      const base: DetectedContext = current ?? { chips: [], priorities: [], playbooks: [] };
+      const nextIndex = base.chips.length;
+      return {
+        ...base,
+        chips: [...base.chips, { label: "New label", value: "Edit value" }],
+      };
+    });
+    setEditingChips((prev) => {
+      const next = new Set(prev);
+      next.add((editableContext?.chips.length ?? 0));
+      return next;
+    });
+  };
+
+  const handleRemoveChip = (index: number) => {
+    const confirmed = window.confirm("Remove this signal?");
+    if (!confirmed) return;
+    setEditableContext((current) => {
+      if (!current) return current;
+      const nextChips = current.chips.filter((_, i) => i !== index);
+      return { ...current, chips: nextChips };
+    });
+    setEditingChips((prev) => {
+      const next = new Set<number>();
+      prev.forEach((i) => {
+        if (i < index) next.add(i);
+        if (i > index) next.add(i - 1);
+      });
+      return next;
+    });
+  };
+
+  const toggleEditChip = (index: number) => {
+    setEditingChips((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
   };
 
   const formatDuration = (seconds: number) => {
@@ -195,6 +256,8 @@ export default function PostMeeting() {
 
       const data = (await response.json()) as DetectedContext;
       setContextPreview(data);
+      setEditableContext(data);
+      setEditingChips(new Set());
       return data;
     } catch (error) {
       setContextError(error instanceof Error ? error.message : "Unexpected error analyzing context.");
@@ -643,11 +706,67 @@ export default function PostMeeting() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {detectedContext ? (
-            detectedContext.chips.map((chip) => (
-              <div key={`${chip.label}-${chip.value}`} className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">{chip.label}</p>
-                <p className="text-sm text-slate-800">{chip.value}</p>
+          {detectedContext && detectedContext.chips.length ? (
+            detectedContext.chips.map((chip, index) => (
+              <div
+                key={index}
+                className="relative rounded-2xl border border-slate-200 bg-gradient-to-br from-[#FF6B4A1a] via-white to-[#4ECDC41a] p-4 shadow-sm transition hover:border-slate-300"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 mb-1.5">Packaging signal</p>
+                    {editingChips.has(index) ? (
+                      <Input
+                        value={chip.label}
+                        onChange={(e) => handleChipChange(index, "label", e.target.value)}
+                        className="text-sm"
+                      />
+                    ) : (
+                      <p className="text-base text-slate-900 leading-6">{chip.label}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-[#FF6B4A] text-[#FF6B4A] hover:bg-[#FF6B4A]/10"
+                      onClick={() => toggleEditChip(index)}
+                    >
+                      {editingChips.has(index) ? "Done" : "Edit"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 mb-1.5">Packaging details</p>
+                  {editingChips.has(index) ? (
+                    <Textarea
+                      value={chip.value}
+                      onChange={(e) => handleChipChange(index, "value", e.target.value)}
+                      rows={2}
+                      className="text-sm"
+                    />
+                  ) : (
+                    <p className="text-base text-slate-900 leading-6 whitespace-pre-wrap">{chip.value}</p>
+                  )}
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="absolute bottom-3 right-3 h-14 w-14 text-slate-500 hover:bg-slate-100"
+                  onClick={() => handleRemoveChip(index)}
+                  aria-label="Remove chip"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="shrink-0"
+                    style={{ width: 30, height: 30 }}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M9 10v8m6-8v8M4 6h16M10 4h4a1 1 0 011 1v1H9V5a1 1 0 011-1zm8 2v13a2 2 0 01-2 2H8a2 2 0 01-2-2V6h12z" />
+                  </svg>
+                </Button>
               </div>
             ))
           ) : (
@@ -655,6 +774,15 @@ export default function PostMeeting() {
               {isLoadingContext ? "Analyzing with GPT…" : "No context yet. Run analysis to populate signals."}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={handleAddChip}
+            className="rounded-2xl border border-dashed border-slate-300 bg-white/50 p-4 text-left text-sm text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Add signal</p>
+            <p className="text-sm text-slate-700">Click to create a new label and value.</p>
+          </button>
         </div>
 
         <div className="rounded-2xl border border-slate-200 p-6 bg-white space-y-4">
