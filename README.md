@@ -2,9 +2,9 @@
 
 ## LLM-backed post-meeting workflow
 - Capture written or transcribed notes on `PostMeeting.tsx`, then move through the three-step wizard.
-- Step 3 now calls `/api/reports/post-meeting` which invokes the OpenAI Responses API and generates an editable `.docx` brief.
-- The backend ensures payload validation with `zod`, builds a structured JSON report (with a fallback when the LLM fails), and renders a Word document via `docx`.
-- The UI provides optimistic validation (minimum note length), loading/error states, and automatically downloads the returned file for internal review.
+- Step 3 now calls `/api/reports/post-meeting` which invokes the OpenAI Responses API, renders an editable `.docx` brief, and emails it to the configured inbox (defaults to `steve@defft.ai` for testing).
+- The backend ensures payload validation with `zod`, builds a structured JSON report (with a fallback when the LLM fails), renders a Word document via `docx`, and sends it with Nodemailer.
+- The UI provides optimistic validation (minimum note length), loading/error states, and confirms when the email has been dispatched.
 
 ## Running the stack locally
 1. `pnpm install`
@@ -20,6 +20,17 @@ For production builds run `pnpm run build` followed by `pnpm run start`, which b
 | --- | --- | --- |
 | `OPENAI_API_KEY` | Yes | API key used by the backend to call the ChatGPT Responses API. |
 | `OPENAI_MODEL` | No | Optional override for the LLM (defaults to `gpt-4.1-mini`). |
+| `REPORT_RECIPIENT_EMAIL` | No | Inbox that should receive the Word brief (defaults to `steve@defft.ai`). |
+| `REPORT_SENDER_EMAIL` | No | Optional “from” address; falls back to `SMTP_USER` when omitted. |
+| `SMTP_HOST` | Yes | SMTP host used by Nodemailer to send emails. |
+| `SMTP_PORT` | Yes | SMTP port (e.g., 587 or 465). |
+| `SMTP_USER` | Yes | SMTP user/email identity. |
+| `SMTP_OAUTH_CLIENT_ID` | Yes | OAuth client ID for the SMTP provider. |
+| `SMTP_OAUTH_CLIENT_SECRET` | Yes | OAuth client secret for the SMTP provider. |
+| `SMTP_OAUTH_REFRESH_TOKEN` | Yes | Refresh token used to mint access tokens. |
+| `SMTP_OAUTH_ACCESS_TOKEN` | No | Optional pre-fetched access token. |
+| `SMTP_OAUTH_ACCESS_TOKEN_EXPIRES` | No | Optional epoch timestamp (ms) when the provided access token expires. |
+| `SMTP_SECURE` | No | Set to `true` to force TLS; defaults to `true` when port 465, otherwise `false`. |
 | `ALLOWED_ORIGINS` | No | Comma-separated list of origins permitted by CORS (defaults to allowing all origins in development). |
 | `VITE_API_BASE_URL` | No | Client-side override for the API server base URL. Leave empty in production so relative `/api` calls work. |
 

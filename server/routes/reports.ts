@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { sendReportEmail } from "../services/emailReport.js";
 import { generatePostMeetingReport } from "../services/postMeetingReport.js";
 
 const router = Router();
@@ -19,13 +20,16 @@ router.post("/post-meeting", async (req, res, next) => {
   try {
     const { notes } = requestSchema.parse(req.body ?? {});
     const report = await generatePostMeetingReport(notes);
+    const { recipient } = await sendReportEmail({
+      fileName: report.fileName,
+      fileBuffer: report.fileBuffer,
+      notes,
+    });
 
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    );
-    res.setHeader("Content-Disposition", `attachment; filename="${report.fileName}"`);
-    res.status(200).send(report.fileBuffer);
+    res.status(200).json({
+      message: `Report emailed to ${recipient}.`,
+      recipient,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       const message = error.issues[0]?.message ?? "Invalid request.";

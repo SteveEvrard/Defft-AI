@@ -10,8 +10,8 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle2,
-  FileDown,
   Loader2,
+  Send,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -34,28 +34,6 @@ const highlightChips = [
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
 const REPORT_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/api/reports/post-meeting` : "/api/reports/post-meeting";
-const REPORT_FILENAME_FALLBACK = "post-meeting-brief.docx";
-
-const extractFilename = (header: string | null) => {
-  if (!header) return REPORT_FILENAME_FALLBACK;
-  const match = header.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
-  if (match?.[1]) {
-    return match[1].trim();
-  }
-  return REPORT_FILENAME_FALLBACK;
-};
-
-const downloadBlob = (blob: Blob, filename: string) => {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(url);
-};
-
 const MAX_RECORDING_SECONDS = 60;
 const MIN_REPORT_CHARS = 40;
 
@@ -72,7 +50,7 @@ export default function PostMeeting() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
-  const [reportSuccess, setReportSuccess] = useState(false);
+  const [reportSuccessMessage, setReportSuccessMessage] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -109,7 +87,7 @@ export default function PostMeeting() {
     setRecordedSeconds(0);
     setStep(1);
     setReportError(null);
-    setReportSuccess(false);
+    setReportSuccessMessage(null);
     setIsGeneratingReport(false);
     setRecorderError(null);
   };
@@ -180,7 +158,7 @@ export default function PostMeeting() {
   }, [audioUrl]);
 
   useEffect(() => {
-    setReportSuccess(false);
+    setReportSuccessMessage(null);
   }, [notes]);
 
   const stopTranscription = () => {
@@ -377,7 +355,7 @@ export default function PostMeeting() {
 
     setIsGeneratingReport(true);
     setReportError(null);
-    setReportSuccess(false);
+    setReportSuccessMessage(null);
 
     try {
       const response = await fetch(REPORT_ENDPOINT, {
@@ -388,23 +366,22 @@ export default function PostMeeting() {
         body: JSON.stringify({ notes: normalizedNotes }),
       });
 
+      let payload: any = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
       if (!response.ok) {
-        let message = "Unable to generate the report.";
-        try {
-          const payload = await response.json();
-          if (payload?.message) {
-            message = payload.message;
-          }
-        } catch {
-          // ignore JSON parsing errors
-        }
+        const message = payload?.message ?? "Unable to generate the report.";
         throw new Error(message);
       }
 
-      const blob = await response.blob();
-      const filename = extractFilename(response.headers.get("Content-Disposition"));
-      downloadBlob(blob, filename);
-      setReportSuccess(true);
+      const successMessage =
+        payload?.message ??
+        `Report emailed to ${payload?.recipient ?? "the configured inbox"}.`;
+      setReportSuccessMessage(successMessage);
     } catch (error) {
       console.error("Report generation failed", error);
       setReportError(error instanceof Error ? error.message : "Unexpected error generating the report.");
@@ -650,7 +627,8 @@ export default function PostMeeting() {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500 mb-3">Step 3 · Ready to run</p>
           <h2 className="text-2xl sm:text-3xl font-light text-slate-900">Generate the post-meeting brief</h2>
           <p className="text-sm sm:text-base text-slate-600 mt-2">
-            We’ll produce recommendations, cost models, supplier matches, and next steps tailored to this opportunity.
+            We’ll produce recommendations, cost models, supplier matches, and next steps tailored to this opportunity, then
+            email the editable Word brief to your team.
           </p>
         </div>
 
@@ -674,8 +652,8 @@ export default function PostMeeting() {
         <div className="rounded-2xl border border-slate-200 p-6 bg-slate-50">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-3">Next up</p>
           <p className="text-sm text-slate-700">
-            Hit “Generate Word brief” to create an editable .docx we populate with GPT. Provide at least ~40 characters so
-            the model has enough context, then edit the output together before sharing.
+            Hit “Email Word brief” to let GPT build the .docx and send it to the configured inbox (defaults to
+            steve@defft.ai). Provide at least ~40 characters so the model has enough detail before we email the team.
           </p>
         </div>
 
@@ -684,9 +662,9 @@ export default function PostMeeting() {
             {reportError}
           </div>
         )}
-        {reportSuccess && (
+        {reportSuccessMessage && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            Word brief downloaded. Share it internally or tailor it further before the customer hand-off.
+            {reportSuccessMessage}
           </div>
         )}
 
@@ -722,12 +700,12 @@ export default function PostMeeting() {
               {isGeneratingReport ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating…
+                  Sending…
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <FileDown className="h-4 w-4" />
-                  Generate Word brief
+                  <Send className="h-4 w-4" />
+                  Email Word brief
                 </div>
               )}
             </Button>
