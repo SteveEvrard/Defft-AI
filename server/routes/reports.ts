@@ -6,15 +6,29 @@ import { generatePostMeetingReport } from "../services/postMeetingReport.js";
 
 const router = Router();
 
+const reportContextSchema = z.object({
+  chips: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.string(),
+      })
+    )
+    .default([]),
+  priorities: z.array(z.string()).default([]),
+  playbooks: z.array(z.string()).default([]),
+});
+
 const reportRequestSchema = z.object({
   notes: z
     .string()
     .trim()
     .min(1, { message: "Notes are required." })
     .refine((value) => value.length >= 40, {
-      message: "Add a bit more detail so we can prepare the brief.",
+      message: "Add a bit more detail so we can generate strong packaging recommendations.",
     })
     .max(6000, { message: "Please shorten the summary to under 6,000 characters." }),
+  context: reportContextSchema.optional(),
 });
 
 const contextRequestSchema = z.object({
@@ -27,8 +41,8 @@ const contextRequestSchema = z.object({
 
 router.post("/post-meeting", async (req, res, next) => {
   try {
-    const { notes } = reportRequestSchema.parse(req.body ?? {});
-    const report = await generatePostMeetingReport(notes);
+    const { notes, context } = reportRequestSchema.parse(req.body ?? {});
+    const report = await generatePostMeetingReport(notes, context);
     const { recipient } = await sendReportEmail({
       fileName: report.fileName,
       fileBuffer: report.fileBuffer,

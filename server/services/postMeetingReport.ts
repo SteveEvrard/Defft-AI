@@ -12,6 +12,7 @@ import {
 } from "docx";
 import { z } from "zod";
 import { getOpenAIClient } from "../lib/openai-client.js";
+import type { ContextPreview } from "./contextPreview.js";
 
 const SolutionTableRow = z.object({
   layer: z.string(),
@@ -81,13 +82,13 @@ const responseShapeDescription = JSON.stringify(
 
 type HeadingLevelValue = (typeof HeadingLevel)[keyof typeof HeadingLevel];
 
-export async function generatePostMeetingReport(notes: string) {
+export async function generatePostMeetingReport(notes: string, context?: ContextPreview) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
   const sanitizedNotes = notes.trim().slice(0, 5000);
-  const structured = await buildStructuredBrief(sanitizedNotes);
+  const structured = await buildStructuredBrief(sanitizedNotes, context);
   const buffer = await createWordDocument(structured, sanitizedNotes);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -97,7 +98,7 @@ export async function generatePostMeetingReport(notes: string) {
   };
 }
 
-async function buildStructuredBrief(notes: string): Promise<StructuredReport> {
+async function buildStructuredBrief(notes: string, context?: ContextPreview): Promise<StructuredReport> {
   try {
     const client = getOpenAIClient();
     const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -112,7 +113,14 @@ async function buildStructuredBrief(notes: string): Promise<StructuredReport> {
         },
         {
           role: "user",
-          content: `Meeting summary:\n"""${notes}"""`,
+          content:
+            context && (context.chips?.length || context.priorities?.length || context.playbooks?.length)
+              ? `Meeting summary:\n"""${notes}"""\n\nUser-curated packaging signals and priorities (authoritative; prefer these over your own extractions):\n${JSON.stringify(
+                  context,
+                  null,
+                  2
+                )}`
+              : `Meeting summary:\n"""${notes}"""`,
         },
       ],
     });
@@ -211,7 +219,7 @@ function buildFallbackBrief(notes: string): StructuredReport {
 async function createWordDocument(report: StructuredReport, notes: string) {
   const doc = new Document({
     creator: "Defft.ai",
-    description: "Generated post-meeting briefing based on captured summary.",
+    description: "Generated packaging solutions report based on captured summary.",
     title: report.reportTitle,
     sections: [
       {

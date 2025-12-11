@@ -59,11 +59,11 @@ export async function sendReportEmail(params: SendReportEmailParams) {
   await transporter.sendMail({
     from,
     to,
-    subject: `Defft Post-Meeting Brief – ${new Date().toLocaleDateString()}`,
+    subject: `Defft Packaging Solutions Report – ${new Date().toLocaleDateString()}`,
     text: [
       "Hi team,",
       "",
-      "Attached is the Word brief generated from the latest captured meeting summary.",
+      "Attached is the packaging solutions report generated from the latest captured meeting summary.",
       "",
       "Notes preview:",
       preview,

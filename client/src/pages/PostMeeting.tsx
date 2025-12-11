@@ -464,12 +464,17 @@ export default function PostMeeting() {
     setReportSuccessMessage(null);
 
     try {
+      const requestBody: any = { notes: normalizedNotes };
+      if (detectedContext) {
+        requestBody.context = detectedContext;
+      }
+
       const response = await fetch(REPORT_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ notes: normalizedNotes }),
+        body: JSON.stringify(requestBody),
       });
 
       let payload: any = null;
@@ -833,10 +838,10 @@ export default function PostMeeting() {
       <CardContent className="p-6 sm:p-10 space-y-8">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500 mb-3">Step 3 · Ready to run</p>
-          <h2 className="text-2xl sm:text-3xl font-light text-slate-900">Generate the post-meeting brief</h2>
+          <h2 className="text-2xl sm:text-3xl font-light text-slate-900">Generate packaging solutions</h2>
           <p className="text-sm sm:text-base text-slate-600 mt-2">
-            We’ll produce recommendations, cost models, supplier matches, and next steps tailored to this opportunity, then
-            email the editable Word brief to your team.
+            We’ll translate your notes into packaging solution options, cost models, supplier matches, and next steps,
+            then email the editable report to your team.
           </p>
         </div>
 
@@ -860,8 +865,8 @@ export default function PostMeeting() {
         <div className="rounded-2xl border border-slate-200 p-6 bg-slate-50">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-3">Next up</p>
           <p className="text-sm text-slate-700">
-            Hit “Email Word brief” to generate the .docx and send it to your configured inbox. Provide at least ~40
-            characters so the model has enough detail before we email the team.
+            Hit “Generate packaging report” to build the .docx of recommended packaging solutions and send it to your
+            configured inbox. Provide at least ~40 characters so the model has enough detail before we email the team.
           </p>
         </div>
 
@@ -913,7 +918,7 @@ export default function PostMeeting() {
               ) : (
                 <div className="flex items-center gap-2">
                   <Send className="h-4 w-4" />
-                  Email Word brief
+                  Generate packaging report
                 </div>
               )}
             </Button>

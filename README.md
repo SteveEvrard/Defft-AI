@@ -2,8 +2,8 @@
 
 ## AI-backed post-meeting workflow
 - Capture written or transcribed notes on `PostMeeting.tsx`, then move through the three-step wizard.
-- Step 3 now calls `/api/reports/post-meeting` which invokes the model via the Responses API and generates an editable `.docx` brief.
-- The backend ensures payload validation with `zod`, builds a structured JSON report (with a fallback when the model fails), and renders a Word document via `docx`.
+- Step 3 now calls `/api/reports/post-meeting` which invokes the model via the Responses API and generates an editable `.docx` packaging report.
+- The backend ensures payload validation with `zod`, builds a structured JSON report focused on packaging solutions (with a fallback when the model fails), and renders a Word document via `docx`.
 - The UI provides optimistic validation (minimum note length), loading/error states, and automatically downloads the returned file for internal review.
 
 ## Running the stack locally
