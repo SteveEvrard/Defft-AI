@@ -1,5 +1,6 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   Packer,
@@ -312,6 +313,10 @@ function createChecklistLine(text: string) {
 }
 
 function createTable(headers: string[], rows: string[][]) {
+  const columnCount = headers.length;
+  const defaultColumnWidth = 2400; // twips per column (approx. quarter page for 4 cols)
+  const columnWidths = Array(columnCount).fill(defaultColumnWidth);
+
   const tableRows = [
     new TableRow({
       children: headers.map((h) =>
@@ -356,17 +361,26 @@ function createTable(headers: string[], rows: string[][]) {
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    columnWidths,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+      left: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+      right: { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+    },
     rows: tableRows,
   });
 }
 
-function renderSolutions(solutions: SolutionSchema[]) {
-  const children: Paragraph[] | Table[] = [];
+function renderSolutions(solutions: z.infer<typeof SolutionSchema>[]): (Paragraph | Table)[] {
+  const children: (Paragraph | Table)[] = [];
 
   solutions.forEach((solution, idx) => {
     children.push(createHeading(`${idx + 3}. ${solution.title}`, HeadingLevel.HEADING_2));
     children.push(createHeading("Snapshot", HeadingLevel.HEADING_3));
-    solution.snapshot.forEach((item) => children.push(createBulletParagraph(item)));
+    solution.snapshot.forEach((item: string) => children.push(createBulletParagraph(item)));
 
     children.push(createHeading("Layer Structure", HeadingLevel.HEADING_3));
     children.push(
@@ -385,13 +399,13 @@ function renderSolutions(solutions: SolutionSchema[]) {
     );
 
     children.push(createHeading("Expected Outcome", HeadingLevel.HEADING_3));
-    solution.expectedOutcome.forEach((item) => children.push(createBulletParagraph(item)));
+    solution.expectedOutcome.forEach((item: string) => children.push(createBulletParagraph(item)));
   });
 
   return children;
 }
 
-function createEprTable(rows: EprImpactRow[]) {
+function createEprTable(rows: z.infer<typeof EprImpactRow>[]) {
   return createTable(
     ["Solution", "Material Weight", "EPR Impact", "Notes"],
     rows.map((row) => [row.solution, row.materialWeight, row.eprImpact, row.notes])
