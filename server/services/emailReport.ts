@@ -1,7 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
 
-const DEFAULT_RECIPIENT = "steve@defft.ai";
-
 type SendReportEmailParams = {
   fileName: string;
   fileBuffer: Buffer;
@@ -53,7 +51,7 @@ function getTransporter() {
 export async function sendReportEmail(params: SendReportEmailParams) {
   const transporter = getTransporter();
 
-  const to = process.env.REPORT_RECIPIENT_EMAIL?.trim() || DEFAULT_RECIPIENT;
+  const to = process.env.REPORT_RECIPIENT_EMAIL?.trim() || process.env.SMTP_USER || "reports@defft.ai";
   const from = process.env.REPORT_SENDER_EMAIL || process.env.SMTP_USER || "reports@defft.ai";
 
   const preview = params.notes.length > 280 ? `${params.notes.slice(0, 280)}…` : params.notes || "No notes captured.";

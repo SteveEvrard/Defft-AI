@@ -691,7 +691,7 @@ export default function PostMeeting() {
             {isLoadingContext ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                Analyzing context with GPT…
+                Analyzing context with AI…
               </span>
             ) : (
               <span>AI-detected highlights based on your notes.</span>
@@ -771,7 +771,7 @@ export default function PostMeeting() {
             ))
           ) : (
             <div className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
-              {isLoadingContext ? "Analyzing with GPT…" : "No context yet. Run analysis to populate signals."}
+              {isLoadingContext ? "Analyzing with AI…" : "No context yet. Run analysis to populate signals."}
             </div>
           )}
 
@@ -860,8 +860,8 @@ export default function PostMeeting() {
         <div className="rounded-2xl border border-slate-200 p-6 bg-slate-50">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-3">Next up</p>
           <p className="text-sm text-slate-700">
-            Hit “Email Word brief” to let GPT build the .docx and send it to the configured inbox (defaults to
-            steve@defft.ai). Provide at least ~40 characters so the model has enough detail before we email the team.
+            Hit “Email Word brief” to generate the .docx and send it to your configured inbox. Provide at least ~40
+            characters so the model has enough detail before we email the team.
           </p>
         </div>
 

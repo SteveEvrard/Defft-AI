@@ -1,4 +1,15 @@
-import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import {
+  AlignmentType,
+  Document,
+  HeadingLevel,
+  Packer,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+} from "docx";
 import { z } from "zod";
 import { getOpenAIClient } from "../lib/openai-client.js";
 
@@ -235,23 +246,46 @@ async function createWordDocument(report: StructuredReport, notes: string) {
 }
 
 function createHeading(text: string, level: HeadingLevelValue = HeadingLevel.HEADING_2) {
+  const isTitle = level === HeadingLevel.TITLE;
+  const isSection = level === HeadingLevel.HEADING_2;
+
   return new Paragraph({
-    text,
     heading: level,
-    spacing: { before: 200, after: 120 },
+    alignment: isTitle ? AlignmentType.CENTER : AlignmentType.LEFT,
+    spacing: isTitle
+      ? { before: 200, after: 200 }
+      : { before: 200, after: isSection ? 140 : 100 },
+    children: [
+      new TextRun({
+        text,
+        bold: true,
+        size: isTitle ? 40 : isSection ? 28 : 24,
+        color: isTitle ? "000000" : "1F4E79", // dark blue for section headings
+      }),
+    ],
   });
 }
 
 function createBodyParagraph(text: string) {
   return new Paragraph({
-    children: [new TextRun({ text })],
-    spacing: { after: 160 },
+    children: [
+      new TextRun({
+        text,
+        size: 22, // 11pt
+      }),
+    ],
+    spacing: { after: 180 },
   });
 }
 
 function createBulletParagraph(text: string) {
   return new Paragraph({
-    children: [new TextRun(text)],
+    children: [
+      new TextRun({
+        text,
+        size: 22,
+      }),
+    ],
     bullet: { level: 0 },
     spacing: { after: 80 },
   });
@@ -259,7 +293,12 @@ function createBulletParagraph(text: string) {
 
 function createChecklistLine(text: string) {
   return new Paragraph({
-    children: [new TextRun({ text: `☐ ${text}` })],
+    children: [
+      new TextRun({
+        text: `☐ ${text}`,
+        size: 22,
+      }),
+    ],
     spacing: { after: 80 },
   });
 }
@@ -269,14 +308,40 @@ function createTable(headers: string[], rows: string[][]) {
     new TableRow({
       children: headers.map((h) =>
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })],
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: h,
+                  bold: true,
+                  size: 22,
+                  color: "1F4E79",
+                }),
+              ],
+            }),
+          ],
+          shading: { fill: "F3F4F6" },
         })
       ),
     }),
     ...rows.map(
       (row) =>
         new TableRow({
-          children: row.map((cell) => new TableCell({ children: [new Paragraph(cell)] })),
+          children: row.map(
+            (cell) =>
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: cell,
+                        size: 22,
+                      }),
+                    ],
+                  }),
+                ],
+              })
+          ),
         })
     ),
   ];
