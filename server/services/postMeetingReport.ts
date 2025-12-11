@@ -229,7 +229,7 @@ async function createWordDocument(report: StructuredReport, notes: string) {
           createHeading(report.reportTitle, HeadingLevel.TITLE),
           createBodyParagraph(`Generated ${new Date().toLocaleString()}`),
           createBodyParagraph("Customer: ____________    Location: ____________    Prepared For: ____________"),
-          createBodyParagraph("Prepared By: DEFFT.ai / PackIntel"),
+          createBodyParagraph("Prepared By: DEFFT.ai"),
           createBodyParagraph(`Application: ${report.application}`),
           createBodyParagraph(`Current Film: ${report.currentFilm}`),
           createHeading("1. Executive Summary", HeadingLevel.HEADING_2),
